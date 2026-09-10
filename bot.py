@@ -21,8 +21,8 @@ from ai_reply import generate_reply, score_project, analyze_skills_trend
 from tracker import set_status, format_tracker, STATUSES, load_tracker
 from currency import get_usd_rate
 from notifications import (
-    get_threads, get_feed, get_profile,
-    format_thread, format_feed_item,
+    get_threads, get_profile, get_my_bids,
+    format_thread, format_bid,
     load_last_notif, save_last_notif
 )
 from menus import (
@@ -296,7 +296,10 @@ async def cb_notif_threads(call: types.CallbackQuery):
     await call.answer("⏳ Завантажую...")
     threads = await get_threads()
     if not threads:
-        await call.message.answer("💬 Повідомлень немає.")
+        await call.message.answer(
+            "💬 Повідомлень немає або API не повертає даних.\n"
+            "Перевір токен Freelancehunt у налаштуваннях Railway."
+        )
         return
     await call.message.answer("💬 <b>Останні повідомлення:</b>\n━━━━━━━━━━━━━━")
     for t in threads[:5]:
@@ -307,13 +310,13 @@ async def cb_notif_threads(call: types.CallbackQuery):
 @dp.callback_query(F.data == "notif_feed")
 async def cb_notif_feed(call: types.CallbackQuery):
     await call.answer("⏳ Завантажую...")
-    feed = await get_feed()
-    if not feed:
-        await call.message.answer("🔔 Стрічка подій порожня.")
+    bids = await get_my_bids()
+    if not bids:
+        await call.message.answer("📤 Активних ставок немає.")
         return
-    await call.message.answer("🔔 <b>Стрічка подій:</b>\n━━━━━━━━━━━━━━")
-    for item in feed[:7]:
-        text = format_feed_item(item)
+    await call.message.answer("📤 <b>Мої ставки:</b>\n━━━━━━━━━━━━━━")
+    for bid in bids[:8]:
+        text = format_bid(bid)
         await call.message.answer(text, disable_web_page_preview=True)
         await asyncio.sleep(0.3)
 
@@ -618,7 +621,6 @@ async def check_new_projects(force=False):
             continue
 
         text, title, description, skills, url, budget = await format_project(project)
-        inc_stat("total_seen")
 
         attrs   = project.get("attributes", {})
         amount  = (attrs.get("budget") or {}).get("amount") or 0
@@ -634,6 +636,7 @@ async def check_new_projects(force=False):
                 reply_markup=project_card_keyboard(pid, title, skills, description, url, budget),
                 disable_web_page_preview=True
             )
+            inc_stat("total_seen")
             new_count += 1
             await asyncio.sleep(0.5)
         except Exception as e:
@@ -646,40 +649,21 @@ async def check_new_projects(force=False):
 # ── Моніторинг повідомлень ────────────────────────────────
 async def check_notifications():
     last = load_last_notif()
-
-    # Перевіряємо непрочитані треди
     threads = await get_threads()
     for t in threads:
         attrs  = t.get("attributes", {})
-        unread = attrs.get("unread_count", 0)
+        unread = attrs.get("unread_count", 0) or 0
         tid    = str(t.get("id", ""))
         if unread and tid != str(last.get("thread_id")):
             text, _ = format_thread(t)
             await bot.send_message(
                 MY_CHAT_ID,
-                f"💬 <b>Нове повідомлення на Freelancehunt!</b>\n━━━━━━━━━━━━━━\n{text}",
+                f"💬 <b>Нове повідомлення!</b>\n━━━━━━━━━━━━━━\n{text}",
                 disable_web_page_preview=True
             )
             last["thread_id"] = tid
             save_last_notif(last)
             break
-
-    # Стрічка подій
-    feed = await get_feed()
-    if feed:
-        first_id = str(feed[0].get("id", ""))
-        if first_id and first_id != str(last.get("feed_id")):
-            item = feed[0]
-            text = format_feed_item(item)
-            itype = (item.get("attributes") or {}).get("type", "")
-            if itype in ("award", "review"):
-                await bot.send_message(
-                    MY_CHAT_ID,
-                    f"🔔 <b>Нова подія!</b>\n━━━━━━━━━━━━━━\n{text}",
-                    disable_web_page_preview=True
-                )
-            last["feed_id"] = first_id
-            save_last_notif(last)
 
 # ── Щоденна зведення ─────────────────────────────────────
 async def daily_digest():

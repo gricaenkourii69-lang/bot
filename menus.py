@@ -98,7 +98,7 @@ def tracker_status_keyboard(pid, title, budget):
 
 def notifications_menu():
     b = InlineKeyboardBuilder()
-    b.row(InlineKeyboardButton(text="💬 Повідомлення",    callback_data="notif_threads"))
-    b.row(InlineKeyboardButton(text="🔔 Стрічка подій",   callback_data="notif_feed"))
-    b.row(InlineKeyboardButton(text="👤 Мій профіль",     callback_data="notif_profile"))
+    b.row(InlineKeyboardButton(text="💬 Листування",       callback_data="notif_threads"))
+    b.row(InlineKeyboardButton(text="📤 Мої ставки",       callback_data="notif_feed"))
+    b.row(InlineKeyboardButton(text="👤 Мій профіль",      callback_data="notif_profile"))
     return b.as_markup()

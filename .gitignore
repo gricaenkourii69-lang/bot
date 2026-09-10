@@ -1,0 +1,4 @@
+.env
+seen_projects.json
+__pycache__/
+*.pyc

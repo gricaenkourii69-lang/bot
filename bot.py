@@ -601,6 +601,14 @@ async def check_new_projects(force=False):
     projects  = await get_latest_projects()
     new_count = 0
 
+    # Якщо seen порожній (перший запуск або рестарт) — запам'ятовуємо всі поточні без показу
+    if not seen and not force:
+        for project in projects:
+            seen.add(str(project.get("id", "")))
+        save_seen(seen)
+        log.info(f"Перший запуск: запам'ятали {len(seen)} проектів")
+        return
+
     for project in projects:
         pid = str(project.get("id", ""))
         if pid in seen:
@@ -615,16 +623,14 @@ async def check_new_projects(force=False):
         attrs   = project.get("attributes", {})
         amount  = (attrs.get("budget") or {}).get("amount") or 0
         vip_min = settings.get("vip_budget", 2000)
+        vip_prefix = ""
         if amount >= vip_min:
-            await bot.send_message(
-                MY_CHAT_ID,
-                f"🔥🔥🔥 <b>VIP ЗАМОВЛЕННЯ!</b>\n💰 Бюджет: <b>{amount} UAH</b>"
-            )
+            vip_prefix = f"🔥🔥🔥 <b>VIP ЗАМОВЛЕННЯ! {amount} UAH!</b>\n━━━━━━━━━━━━━━━━━━\n"
 
         try:
             await bot.send_message(
                 MY_CHAT_ID,
-                text,
+                vip_prefix + text,
                 reply_markup=project_card_keyboard(pid, title, skills, description, url, budget),
                 disable_web_page_preview=True
             )
@@ -708,15 +714,20 @@ async def daily_digest():
         )
 
 # ── Фоновий моніторинг ───────────────────────────────────
+_started = False
+
 async def monitor_loop():
+    global _started
     log.info("Моніторинг запущено")
-    await bot.send_message(
-        MY_CHAT_ID,
-        "🚀 <b>FreelanceRadar запущено!</b>\n\n"
-        "Перевіряю нові замовлення та повідомлення кожні 2 хв.\n"
-        "Натисни кнопку нижче щоб почати 👇",
-        reply_markup=main_menu()
-    )
+    if not _started:
+        _started = True
+        await bot.send_message(
+            MY_CHAT_ID,
+            "🚀 <b>FreelanceRadar запущено!</b>\n\n"
+            "Перевіряю нові замовлення та повідомлення кожні 2 хв.\n"
+            "Натисни кнопку нижче щоб почати 👇",
+            reply_markup=main_menu()
+        )
     while True:
         try:
             await check_new_projects()

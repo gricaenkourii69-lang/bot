@@ -57,8 +57,8 @@ def load_settings():
     return load_json(SETTINGS_FILE, {
         "min_budget": 0,
         "max_bids": 999,
-        "skills": ["HTML", "CSS", "JavaScript", "Python", "Telegram", "верстка", "бот", "сайт", "лендинг", "React", "Node"],
-        "blacklist": ["дешево", "студент", "срочно за копейки"],
+        "skills": ["сайт", "веб", "web", "HTML", "CSS", "JavaScript", "JS", "Python", "Telegram", "верстка", "бот", "лендинг", "React", "Node", "WordPress", "WP", "PHP", "програмування", "розробка", "frontend", "backend", "скрипт", "автоматизація"],
+        "blacklist": [],
         "quiet_start": 23,
         "quiet_end": 8,
         "paused": False,
@@ -118,12 +118,13 @@ def is_relevant(project, settings):
         if word.lower() in text:
             return False
 
-    # Белый список навыков
+    # Если список навыков пустой — показываем всё
     skills_filter = [s.lower() for s in settings.get("skills", [])]
-    if skills_filter:
-        return any(kw in text for kw in skills_filter)
+    if not skills_filter:
+        return True
 
-    return True
+    # Проверяем совпадение — достаточно одного слова
+    return any(kw in text for kw in skills_filter)
 
 # ── Клавиатура ───────────────────────────────────────────
 def project_keyboard(pid, title, skills, description, url, budget):

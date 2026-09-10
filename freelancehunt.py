@@ -1,6 +1,6 @@
 import aiohttp
-import json
 import os
+from currency import format_budget
 
 FREELANCEHUNT_TOKEN = os.getenv("FREELANCEHUNT_TOKEN")
 API_URL = "https://api.freelancehunt.com/v2"
@@ -10,76 +10,58 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
-# Навыки по которым ищем заказы
-SKILLS = [
-    "HTML/CSS",
-    "JavaScript",
-    "Python",
-    "Telegram Bot",
-    "Website Development",
-    "PHP",
-    "React",
-    "Node.js",
-]
+async def get_latest_projects():
+    """Отримати останні відкриті проекти"""
+    params = {"page[limit]": 25, "filter[status]": "open"}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{API_URL}/projects",
+                headers=HEADERS,
+                params=params,
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
+                if resp.status != 200:
+                    return []
+                data = await resp.json()
+                return data.get("data", [])
+    except Exception:
+        return []
 
-async def get_latest_projects(skill_filter=None):
-    """Получить последние открытые проекты с фильтром по навыкам"""
-    params = {
-        "page[limit]": 20,
-        "filter[status]": "open",
-    }
-
-    async with aiohttp.ClientSession() as session:
-        async with session.get(
-            f"{API_URL}/projects",
-            headers=HEADERS,
-            params=params
-        ) as resp:
-            if resp.status != 200:
-                return []
-            data = await resp.json()
-            projects = data.get("data", [])
-            return projects
-
-async def get_project_details(project_id):
-    """Получить детали конкретного проекта"""
-    async with aiohttp.ClientSession() as session:
-        async with session.get(
-            f"{API_URL}/projects/{project_id}",
-            headers=HEADERS,
-        ) as resp:
-            if resp.status != 200:
-                return None
-            data = await resp.json()
-            return data.get("data", {})
-
-def format_project(project):
-    """Форматировать проект для отображения в Telegram"""
+async def format_project(project):
+    """Форматувати проект для Telegram"""
     attrs = project.get("attributes", {})
-    pid = project.get("id", "")
+    pid   = project.get("id", "")
 
-    title = attrs.get("name", "Без назви")
+    title       = attrs.get("name", "Без назви")
     description = attrs.get("description", "Опис відсутній")
-    budget_min = attrs.get("budget", {}).get("amount", None) if attrs.get("budget") else None
-    currency = attrs.get("budget", {}).get("currency", "UAH") if attrs.get("budget") else "UAH"
-    bid_count = attrs.get("bid_count", 0)
-    url = f"https://freelancehunt.com/project/{pid}.html"
+    bid_count   = attrs.get("bid_count", 0)
+    url         = f"https://freelancehunt.com/project/{pid}.html"
 
-    skills = []
-    for skill in attrs.get("skills", []):
-        skills.append(skill.get("name", ""))
+    # Бюджет з конвертацією
+    budget_obj  = attrs.get("budget") or {}
+    amount      = budget_obj.get("amount") or 0
+    currency    = budget_obj.get("currency", "UAH")
+    budget_str  = await format_budget(amount, currency)
 
+    # Навички
+    skills = [sk.get("name", "") for sk in attrs.get("skills", [])]
     skills_str = ", ".join(skills) if skills else "Не вказано"
 
-    budget_str = f"{budget_min} {currency}" if budget_min else "Договірна"
+    # Замовник
+    employer    = attrs.get("employer") or {}
+    emp_name    = employer.get("login", "Невідомо")
+    emp_rating  = employer.get("rating", 0)
+    emp_icon    = "⭐" if emp_rating and emp_rating >= 4 else ""
 
     text = (
         f"🆕 <b>{title}</b>\n\n"
         f"💰 Бюджет: <b>{budget_str}</b>\n"
         f"🛠 Навички: {skills_str}\n"
+        f"👤 Замовник: {emp_name} {emp_icon}\n"
         f"📊 Ставок: {bid_count}\n\n"
-        f"📋 <i>{description[:500]}{'...' if len(description) > 500 else ''}</i>\n\n"
+        f"📋 <i>{description[:400]}{'...' if len(description) > 400 else ''}</i>\n\n"
         f"🔗 <a href='{url}'>Відкрити проект</a>"
     )
 
-    return text, title, description, skills_str, url
+    return text, title, description, skills_str, url, budget_str
